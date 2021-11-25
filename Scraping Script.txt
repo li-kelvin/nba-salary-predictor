@@ -1,0 +1,29 @@
+setwd("/Users/likel/Desktop/NBA")
+library(rvest)
+library(stringr)
+library(magrittr)
+library(data.table)
+library(tidyverse)
+
+# Get salary dataset 
+page <- read_html("https://www.basketball-reference.com/contracts/players.html")
+salary.table <- page %>% html_table(header = FALSE) %>% extract2(1)
+names(salary.table) <- salary.table[2,]
+salary.table <- salary.table[-1,]
+salary.table <- salary.table[-1,2:4]
+names(salary.table)[3] <- "season21_22"
+
+#deleting useless rows
+salary.table <- salary.table %>% 
+  filter(Player != "" & Player != "Player")
+
+#Removing Dollor sign
+salary.table$season21_22 <- 
+  gsub(",", "", salary.table$season21_22)
+
+salary.table$season21_22 <- 
+  gsub('\\$', '', salary.table$season21_22)
+salary.table$season21_22 <- as.numeric(salary.table$season21_22)
+
+
+write.csv(salary.table, "NBA_season21_22_salary.csv")

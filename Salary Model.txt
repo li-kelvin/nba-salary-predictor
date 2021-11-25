@@ -1,0 +1,70 @@
+library(data.table)
+library(corrplot)
+library(GGally)
+library(tidyverse)
+library(PerformanceAnalytics)
+library(plotly)
+
+salary.table <- read.csv("/Users/likel/Desktop/NBA/NBA_season21_22_salary.csv")
+ss <- read.csv("/Users/likel/Desktop/NBA/Seasons_Stats.csv")
+
+str(salary.table)
+str(ss)
+
+stats21 <- ss %>% filter(Year >= 2021) %>% select(Year:G, MP, PER, FG:PTS) %>% distinct(Player, .keep_all = TRUE) %>% mutate(MPG = MP/G, PPG = PTS/G, 
+	APG = AST/G, RPG = TRB/G, TOPG = TOV/G, BPG = BLK/G, SPG = STL/G)
+
+stats_salary <- merge(stats21, salary.table, by.x = "Player", by.y = "Player")
+names(stats_salary)[40] <- "salary21_22"
+stats_salary <- stats_salary[-39]
+
+corrplot(cor(stats_salary %>% select(salary21_22, MPG:SPG, Age, PER, contains("%")), use = "complete.obs"), method = "circle",type = "upper")
+
+stats_salary_cor <- stats_salary %>% select(salary21_22, PPG, MPG, TOPG, RPG, PER, SPG, APG)
+ggpairs(stats_salary_cor)
+
+cor(stats_salary_cor)[,"salary21_22"]
+
+names(stats_salary)[5] <- "Team"
+plot_ly(data = stats_salary, x = ~salary21_22, y = ~PPG, color = ~Team,
+        hoverinfo = "text",
+        text = ~paste("Player: ", Player,
+                      "<br>Salary: ", format(salary21_22, big.mark = ","),"$",
+                      "<br>PPG: ", round(PPG, digits = 3),
+                      "<br>Team: ", Team)) %>% 
+  layout(
+    title = "Salary vs Point Per Game",
+    xaxis = list(title = "Salary USD"),
+    yaxis = list(title = "Point per Game")
+  )
+
+stats_salary %>% 
+  ggplot(aes(x = salary21_22, y = PPG)) + 
+  geom_point() + 
+  geom_smooth(method = "lm") 
+
+stats_salary_regression <- 
+  stats_salary %>% select(salary21_22, MPG:SPG)
+lm(salary21_22~., data=stats_salary_regression)
+
+avg.minutes <- mean(stats_salary_regression$MPG)
+avg.turnover <- mean(stats_salary_regression$TOPG)
+stats_salary_regression$Trusted <- as.factor(ifelse(stats_salary_regression$MPG >= avg.minutes, "Yes", "No"))
+stats_salary_regression$Agressiveness <- as.factor(ifelse(stats_salary_regression$TOPG >= avg.turnover, "Yes", "No"))
+head(stats_salary_regression)
+
+stats_salary_regression %>% 
+  ggplot(aes(x = salary21_22, y = PPG, colour = Agressiveness)) + 
+  geom_point() + 
+  geom_smooth(method="lm")
+
+lm(formula = salary21_22 ~ Trusted * Agressiveness, data=stats_salary_regression)
+
+salary_prediction <- function(m, point, minutes, turn_over){
+  pre_new <- predict(m, data.frame(PPG = point, MPG = minutes, TOPG = turn_over))
+  msg <- paste("PPG:", point, ",MPG:", minutes, ",TOPG:", turn_over, " ==> Expected Salary: $", format(round(pre_new), big.mark = ","), sep = "")
+  print(msg)
+}
+
+model <- lm(formula = salary21_22 ~ PPG + MPG + TOPG, data = stats_salary_regression)
+salary_prediction(model, 16.7, 31.2, 1.5)
